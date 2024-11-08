@@ -1,61 +1,61 @@
 pipeline {
     agent any
-
+    environment {
+        DOCKER_CREDENTIALS = credentials('dockerhub-credentials') // Jenkins credential ID for Docker Hub credentials
+    }
     stages {
-        stage('Clone Repository') {
+        stage('Checkout SCM') {
             steps {
-                git branch: 'main', url: 'https://github.com/harshath1234/nodejs-api.git'
+                checkout scm
             }
         }
-
-        stage('Build Docker Image') {
+        stage('Install Dependencies') {
             steps {
                 script {
-                    dockerImage = docker.build("nodejs-api:${env.BUILD_ID}")
+                    sh 'npm install'
                 }
             }
         }
-
         stage('Run Tests') {
             steps {
                 script {
-                    dockerImage.inside {
-                        sh 'npm test'  // Assuming you have test scripts
-                    }
+                    sh 'npm test'
                 }
             }
         }
-
-        stage('Push to Docker Hub') {
+        stage('Build Docker Image') {
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
-                        dockerImage.push("${env.BUILD_ID}")
-                        dockerImage.push("latest")
-                    }
+                    sh 'docker build -t harshath123/nodejs-api .'
                 }
             }
         }
-
-        stage('Deploy') {
+        stage('Push Docker Image') {
             steps {
                 script {
-                    // Remove any previous containers
-                    sh 'docker stop nodejs-api || true && docker rm nodejs-api || true'
-
-                    // Run the new container
-                    sh 'docker run -d --name nodejs-api -p 3000:3000 nodejs-api:latest'
+                    // Perform Docker login with credentials stored in Jenkins
+                    sh '''
+                    docker login -u ${DOCKER_CREDENTIALS_USR} -p ${DOCKER_CREDENTIALS_PSW}
+                    '''
+                    sh 'docker push harshath123/nodejs-api:latest'
+                }
+            }
+        }
+        stage('Deploy to Container') {
+            steps {
+                script {
+                    echo 'Deploying to container...'
+                    // Add deployment steps here (if needed)
                 }
             }
         }
     }
-
     post {
-        always {
-            script {
-                // Clean up the Docker environment
-                dockerImage.remove()
-            }
+        success {
+            echo 'Pipeline executed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed, please check the logs for details.'
         }
     }
 }
