@@ -1,0 +1,61 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'main', url: 'https://github.com/yourusername/nodejs-api.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    dockerImage = docker.build("nodejs-api:${env.BUILD_ID}")
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    dockerImage.inside {
+                        sh 'npm test'  // Assuming you have test scripts
+                    }
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
+                        dockerImage.push("${env.BUILD_ID}")
+                        dockerImage.push("latest")
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    // Remove any previous containers
+                    sh 'docker stop nodejs-api || true && docker rm nodejs-api || true'
+
+                    // Run the new container
+                    sh 'docker run -d --name nodejs-api -p 3000:3000 nodejs-api:latest'
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                // Clean up the Docker environment
+                dockerImage.remove()
+            }
+        }
+    }
+}
